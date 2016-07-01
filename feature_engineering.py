@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import os
 import math
+import json
 
 def load_features(itempairs, itemdata, forceReload=False):
     featurePath = 'data/ItemPairs_train_features.csv'
@@ -24,7 +25,9 @@ def load_features(itempairs, itemdata, forceReload=False):
 
 def make_features(itempairs, itemdata):
     
+    fillna = -99999
     # General preprocessing
+    itemdata.fillna(fillna)
     itemdata.attrsJSON[itemdata.attrsJSON.isnull()]=None
     itemdata.images_array[itemdata.images_array.isnull()]=None
     itemdata.description[itemdata.description.isnull()]=None
@@ -42,6 +45,9 @@ def make_features(itempairs, itemdata):
     itempairs['d_metroID'] = None
     itempairs['d_images'] = None
     itempairs['d_len_images'] = None
+    itempairs['d_len_keys_attr'] = None
+    itempairs['attr_keys1'] = None
+    itempairs['attr_keys2'] = None
     
     # Calculate values for features
     for i,d in itempairs.iterrows():
@@ -55,8 +61,25 @@ def make_features(itempairs, itemdata):
         itempairs.set_value(i,'d_len_title', relative_distance(len(item1.title),len(item2.title)))
         itempairs.set_value(i,'d_description', item1.description == item2.description)
         itempairs.set_value(i,'d_len_description', relative_distance(lenNaN(item1.description), lenNaN(item2.description)))
+        
+        # JSON attributes
+        if not (item1.attrsJSON is None or item2.attrsJSON is None):
+            attrs1 = json.loads(item1.attrsJSON)
+            attrs2 = json.loads(item2.attrsJSON)
+            
+            itempairs.set_value(i,'attr_keys1', len(attrs1))
+            itempairs.set_value(i,'attr_keys2', len(attrs2))
+            itempairs.set_value(i,'d_len_keys_attr', relative_distance(len(attrs1.keys()), len(attrs2.keys())))
+
+        
+        # Are they the same?     
         itempairs.set_value(i,'d_attrsJSON', item1.attrsJSON == item2.attrsJSON)
+        # Same string length?        
         itempairs.set_value(i,'d_len_attrsJSON', relative_distance(lenNaN(item1.attrsJSON),lenNaN(item2.attrsJSON)))    
+        # Count number of keys
+            
+        
+        # Location        
         itempairs.set_value(i,'d_locationID', item1.locationID == item2.locationID) 
         itempairs.set_value(i,'d_metroID', item1.metroID == item2.metroID)
         
@@ -106,5 +129,5 @@ def relative_distance(value1, value2):
     elif value1 - value2 == 0:
         return 0
     else: 
-        return math.log(float(abs(value1 - value2)) / abs(value1 + value2))
-        #return float(abs(value1 - value2)) / abs(value1 + value2)
+        #return math.log(float(abs(value1 - value2)) / abs(value1 + value2))
+        return float(abs(value1 - value2)) / abs(value1 + value2)

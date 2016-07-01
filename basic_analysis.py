@@ -29,7 +29,7 @@ print("Loading data ({} rows) took {:.2f}s".format(data.shape[0], time.time()-st
 FEATURE ENGINEERING
 '''
 from feature_engineering import load_features
-recalculateFeatures = (False or reloadData)
+recalculateFeatures = (True or reloadData)
 start = time.time()
 data = load_features(data, itemdata, recalculateFeatures)
 print("Loading features took {:.2f}s".format(time.time()-start))
