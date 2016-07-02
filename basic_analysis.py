@@ -9,19 +9,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-
-
 '''
 LOADING DATA
 '''
 from load_data import load_data
 # Settings for loading data
-maxRows = 10000 #None to read all data
+maxRows = 20000 #<=0 to read all data
 random_state = 99
 reloadData = False
 
 start = time.time()
-(data, itemdata) = load_data(forceReload=reloadData,maxRows=maxRows, rs=random_state)
+(itemdata, path) = load_data(forceReload=reloadData,maxRows=maxRows, rs=random_state)
 print("Loading data ({} rows) took {:.2f}s".format(data.shape[0], time.time()-start))
 
 
@@ -31,7 +29,7 @@ FEATURE ENGINEERING
 from feature_engineering import load_features
 recalculateFeatures = (True or reloadData)
 start = time.time()
-data = load_features(data, itemdata, recalculateFeatures)
+data = load_features(data, itemdata, forceReload = recalculateFeatures)
 print("Loading features took {:.2f}s".format(time.time()-start))
 
 selected_features = ['d_price','d_title','d_len_title','d_description','d_len_description','d_images','d_len_images']
@@ -44,25 +42,86 @@ from sklearn.cross_validation import train_test_split
    
 y = data.isDuplicate
 X = data.drop(list(set(data.columns) - set(selected_features)),axis=1)
-cv = cross_validation.ShuffleSplit(digits.data.shape[0], n_iter=100,
-                                   test_size=0.2, random_state=0)
-X_train, X_test, y_train, y_test = train_test_split( X, y, test_size=0.33, random_state=random_state)
+#
+X_train, X_val, y_train, y_val = train_test_split( X, y, test_size=0.2, random_state=random_state)
+
 
 '''
-TESTS USING DECISION TREE
+TRAIN DECISION TREE
 '''
 from decisiontree import predict_using_decision_tree, report_result
 forceUpdateClf = (False or recalculateFeatures)
 
-y_predict = predict_using_decision_tree(X_train, y_train, X_test, forceUpdateClf)
+clf, y_predict = predict_using_decision_tree(X_train, y_train, X_val, forceUpdateClf)
 
-report_result(y_test, y_predict)
+report_result(y_val, y_predict)
 
-from sklearn.learning_curve import learning_curve
-from decisiontree import train_decision_tree
 
-clf = train_decision_tree(X_train, y_train)
-learning_curve(clf, X, y)
+'''
+KNN Very low rate of duplicates, high rate of no duplicates
+from sklearn.neighbors import KNeighborsClassifier
+knn = KNeighborsClassifier(n_neighbors=500, weights='uniform')
+knn.fit(X_train,y_train)
+y_pred = knn.predict(X_val)
+report_result(y_pred,y_val)
+
+LINEAR MODEL same issue
+from sklearn import linear_model
+logreg = linear_model.LogisticRegression()
+logreg.fit(X_train, y_train)
+y_pred = logreg.predict(X_val)
+report_result(y_pred,y_val)
+'''
+from sklearn.ensemble import RandomForestClassifier
+from sklearn import cross_validation, grid_search
+rf = RandomForestClassifier()
+param_grid = {"max_depth": [3, 4, 5],
+              "max_features": [3, 5],
+              "min_samples_split": [20, 40],
+              "min_samples_leaf": [40, 80],
+              "bootstrap": [True],
+              "criterion": ["gini"]}
+cv = cross_validation.ShuffleSplit(X_train.shape[0], n_iter=100,test_size=0.2, random_state=123)
+clf = grid_search.GridSearchCV(rf, param_grid, cv=cv, n_jobs=4, scoring='roc_auc')
+clf = clf.fit(X_train,y_train)
+y_pred = clf.predict(X_val)
+report_result(y_pred,y_val)
+'''
+RUN ON TEST DATA
+'''
+from load_data import load_data_test
+from decisiontree import predict_result
+(testdata,testitemdata) = load_data_test()
+
+testdata = load_features(testdata, traindata=False, forceReload = True)
+
+X_test = testdata.drop(list(set(testdata.columns) - set(selected_features)),axis=1)
+X_test.d_price = X_test.d_price.fillna(0)
+
+y_test = predict_result(clf, X_test)
+
+y_prob = clf.predict_proba(X_test)
+
+
+'''
+FINISH AND CREATE SUBMIT FILE
+'''
+print("Creating submssion file")
+from save_data import create_submit_file_kaggle_avito
+create_submit_file_kaggle_avito(y_prob)
+
+
+#from sklearn.learning_curve import learning_curve
+#from decisiontree import train_decision_tree
+#from sklearn import cross_validation
+#from sklearn import tree
+
+#clf = train_decision_tree(X_train, y_train,forceUpdateClf)
+#start = time.time()
+#cv = cross_validation.ShuffleSplit(X.shape[0], n_iter=100,test_size=0.2, random_state=random_state)
+#plot_learning_curve(tree.DecisionTreeClassifier(), "Testje",X, y, cv=cv)
+#plot_learning_curve(clf, "Testje",X, y, cv=cv, n_jobs=4)
+#print("Learning curve took {:.2f}s".format(time.time()-start))
 #plotDecisionBoundary(X,y,'d_price',clf2)
 
 def plotDecisionBoundary(X,y,c_all,clf):
